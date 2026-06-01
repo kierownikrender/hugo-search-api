@@ -1,11 +1,11 @@
 package main
 
 import (
-	"os"
 	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
+	"os"
 
 	_ "github.com/lib/pq"
 )
@@ -22,20 +22,29 @@ type SearchResult struct {
 var db *sql.DB
 
 func initDB() error {
-    var err error
+	var err error
 
-    // Render / Neon DATABASE_URL z env
-    connStr := os.Getenv("DATABASE_URL")
+	connStr := os.Getenv("DATABASE_URL")
+	if connStr == "" {
+		log.Println("DATABASE_URL not set")
+		return nil
+	}
 
-    db, err = sql.Open("postgres", connStr)
-    if err != nil {
-        return err
-    }
+	db, err = sql.Open("postgres", connStr)
+	if err != nil {
+		return err
+	}
 
-    db.SetMaxOpenConns(25)
-    db.SetMaxIdleConns(5)
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(5)
 
-    return db.Ping()
+	return db.Ping()
+}
+
+func healthHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"ok"}`))
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +66,11 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 
 	if query == "" {
 		_ = json.NewEncoder(w).Encode([]SearchResult{})
+		return
+	}
+
+	if db == nil {
+		http.Error(w, "database not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -104,19 +118,22 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-    if err := initDB(); err != nil {
-        log.Fatal(err)
-    }
-    defer db.Close()
+	if err := initDB(); err != nil {
+		log.Printf("Database not available: %v", err)
+		log.Println("Server starting anyway — search will fail until DB is ready")
+	}
+	if db != nil {
+		defer db.Close()
+	}
 
-    http.HandleFunc("/search", searchHandler)
+	http.HandleFunc("/health", healthHandler)
+	http.HandleFunc("/search", searchHandler)
 
-    // Render $PORT is set up automatically
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-    log.Printf("Search API listening on :%s", port)
-    log.Fatal(http.ListenAndServe(":"+port, nil))
+	log.Printf("Search API listening on :%s", port)
+	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
