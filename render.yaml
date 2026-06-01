@@ -1,6 +1,4 @@
 # render.yaml
-name: Database API service
-
 services:
   - type: web
     name: hugo-search-api
