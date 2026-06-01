@@ -1,0 +1,15 @@
+# render.yaml
+name: Database API service
+
+services:
+  - type: web
+    name: hugo-search-api
+    runtime: go
+    region: frankfurt
+    plan: free
+    buildCommand: go build -o app .
+    startCommand: ./app
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+    healthCheckPath: /health
